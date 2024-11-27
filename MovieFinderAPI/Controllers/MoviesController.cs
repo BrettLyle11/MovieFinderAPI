@@ -10,6 +10,7 @@ using System.ComponentModel;
 using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Reflection.Metadata;
 using System.Text.Json;
 using static System.Net.WebRequestMethods;
 namespace MovieFinderAPI.Controllers
@@ -51,7 +52,7 @@ namespace MovieFinderAPI.Controllers
             {
                 return BadRequest("Invalid user data");
             }
-            var sql = "SELECT * FROM MovieFinderUser WHERE (Username = @p0 OR Email = @p0) AND Password = @p1";
+            var sql = "SELECT * FROM MovieFinderUser WHERE  Email = @p0 AND Password = @p1";
 
             // Execute the query and map results to the entity
             var users = await _context.MovieFinderUsers
@@ -60,7 +61,26 @@ namespace MovieFinderAPI.Controllers
 
             if (users.Count == 0)
             {
-                return BadRequest("Invalid username or password");
+                sql = "SELECT * FROM Admin WHERE  Username = @p0 AND Password = @p1";
+                var admin = await _context.Admins
+               .FromSqlRaw(sql, user.Username, user.Password)
+               .ToListAsync();
+                if (admin.Count == 0) {
+                    return Ok(new { message = "Invalid username or password" });
+                }
+                else {
+
+                    var adminDto = new AdminDTO
+                    {
+                        AdminID = admin[0].AdminID,
+                        Username = admin[0].Username
+
+                    };
+
+
+                    return Ok(new { message = "success", admin = adminDto });
+                }
+
             }
             else
             {
@@ -74,11 +94,11 @@ namespace MovieFinderAPI.Controllers
                     // Map other properties as needed
                 };
 
-                return Ok(new {message="success", user=userDto });
+                return Ok(new { message = "success", user = userDto });
             }
         }
 
-            [HttpPost("Sign-Up")]
+        [HttpPost("Sign-Up")]
         public async Task<IActionResult> GetNextUserId([FromBody] NewUser user)
         {
             var sql = "SELECT NEXT VALUE FOR UserIDSequence;";
@@ -131,9 +151,9 @@ namespace MovieFinderAPI.Controllers
                     }
                     await _context.SaveChangesAsync();
 
-                    return Ok(new { message = "Success", Id = newUserId , Email = user.Email , username = user.Username , Genre = user.Genre });
+                    return Ok(new { message = "Success", Id = newUserId, Email = user.Email, username = user.Username, Genre = user.Genre });
                 }
-            }catch(Exception e)
+            } catch (Exception e)
             {
                 return StatusCode(500, "Failed to create user");
             }
@@ -166,7 +186,7 @@ namespace MovieFinderAPI.Controllers
                     {
                         while (await reader.ReadAsync())
                         {
-                            actorNames.Add(reader.GetString(0)); 
+                            actorNames.Add(reader.GetString(0));
                         }
                     }
                 }
@@ -249,7 +269,7 @@ namespace MovieFinderAPI.Controllers
 
 
         [HttpPost("moviesByFilters")]
-        
+
         public async Task<ActionResult<MovieSearchDetails>> getFilteredMovie([FromBody] MovieFilters filters)
         {
             if (filters == null)
@@ -277,7 +297,390 @@ namespace MovieFinderAPI.Controllers
             }
             return Ok(movies);
         }
+        [HttpPost("searchMovieName/{searchName}")]
+        public async Task<ActionResult<IEnumerable<string>>> getMovieNames([FromRoute] string searchName)
+        {
+            var sql = "SELECT CONCAT(Name,' : ',year) as MovieAndYear FROM Movie WHERE Name LIKE @name";
 
+            List<string> listOfNames = new List<string>();
+
+            var parameter = new SqlParameter("@name", $"%{searchName}%");
+            using (var connection = _context.Database.GetDbConnection())
+            {
+                await connection.OpenAsync();
+
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = sql;
+                    command.Parameters.Add(parameter);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            listOfNames.Add(reader.GetString(0));
+                        }
+                    }
+                }
+            }
+
+
+            return Ok(listOfNames);
+        }
+
+        [HttpPost("GrabUpdateHistory")]
+        public async Task<ActionResult<List<ManagesMoviesDTO>>> GetAdminMovieHistory([FromBody] MovieNameAndYearDTO movie)
+        {
+            if (movie == null || movie.Year == 0 || string.IsNullOrEmpty(movie.Name))
+            {
+                return BadRequest("Movie name and year must be provided.");
+            }
+
+            try
+            {
+                var updates = new List<ManagesMoviesDTO>();
+
+                using (var connection = _context.Database.GetDbConnection())
+                {
+                    await connection.OpenAsync();
+
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = @"
+                    SELECT 
+                        mm.AdminID, 
+                        a.Username, 
+                        mm.Date
+                    FROM 
+                        Manages_Movie mm
+                    JOIN 
+                        Admin a ON a.AdminID = mm.AdminID
+                    WHERE 
+                        mm.Year = @Year AND mm.Name = @Name
+                    ORDER BY 
+                        mm.Date DESC";
+
+                        // Add parameters
+                        command.Parameters.Add(new SqlParameter("@Year", movie.Year));
+                        command.Parameters.Add(new SqlParameter("@Name", movie.Name));
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                updates.Add(new ManagesMoviesDTO
+                                {
+                                    AdminID = reader.GetInt32(reader.GetOrdinal("AdminID")),
+                                    Username = reader.GetString(reader.GetOrdinal("Username")),
+                                    Date = reader.GetDateTime(reader.GetOrdinal("Date"))
+                                });
+                            }
+                        }
+                    }
+                }
+
+                return Ok(updates);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Error = ex.Message });
+            }
+        }
+
+        [HttpPost("GetSuggestProductionCompanies/{productionCompanyname}")]
+        public async Task<ActionResult<IEnumerable<string>>> GetProductionCompanyName([FromRoute] string productionCompanyname)
+        {
+            if (string.IsNullOrWhiteSpace(productionCompanyname))
+            {
+                return BadRequest("Production company name cannot be empty.");
+            }
+
+            var sql = "SELECT ProductionCompanyName FROM ProductionCompany WHERE ProductionCompanyName LIKE @name";
+
+            var nameParam = new SqlParameter("@name", $"%{productionCompanyname}%");
+
+            var productionCompanyNames = new List<string>();
+
+            using (var connection = _context.Database.GetDbConnection())
+            {
+                await connection.OpenAsync();
+
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = sql;
+                    command.Parameters.Add(nameParam);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            productionCompanyNames.Add(reader.GetString(0));
+                        }
+                    }
+                }
+            }
+
+            // Return the list of production company names
+            return Ok(productionCompanyNames);
+        }
+
+        [HttpPost("NewRatingScale")]
+        public async Task<IActionResult> AddNewRatingCompany([FromBody] RatingScale ratingScale)
+        {
+            if (ratingScale == null || string.IsNullOrEmpty(ratingScale.RatingCompanyName) || string.IsNullOrEmpty(ratingScale.Scale))
+            {
+                return BadRequest("RatingCompanyName and Scale must be provided.");
+            }
+
+            try
+            {
+                // Raw SQL to insert the new rating company into the database
+                var sql = @"
+            INSERT INTO RatingCompany (RatingCompanyName, RatingScale)
+            VALUES (@RatingCompanyName, @Scale)";
+
+                // Parameters to prevent SQL injection
+                var parameters = new[]
+                {
+            new SqlParameter("@RatingCompanyName", ratingScale.RatingCompanyName),
+            new SqlParameter("@Scale", ratingScale.Scale)
+        };
+
+                // Execute the SQL command
+                await _context.Database.ExecuteSqlRawAsync(sql, parameters);
+
+                return Ok(new { Message = "Rating company added successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Error = ex.Message });
+            }
+        }
+
+            [HttpPost("update")]
+        public async Task<IActionResult> UpdateMovieAsync([FromBody] MovieUpdateDTO movieUpdateDto)
+        {
+            using (var transaction = await _context.Database.BeginTransactionAsync())
+            {
+                try
+                {
+                    var manageSql = "INSERT INTO Manages_Movie (AdminID, Year, Name, Date) VALUES (@AdminID, @Year, @Name, @Date)";
+                    await _context.Database.ExecuteSqlRawAsync(manageSql,
+                        new SqlParameter("@AdminID", movieUpdateDto.AdminId),
+                        new SqlParameter("@Year", movieUpdateDto.OriginalYear),
+                        new SqlParameter("@Name", movieUpdateDto.OriginalTitle),
+                        new SqlParameter("@Date", DateTime.UtcNow));
+                    // 1. Update fields in the Movie table
+                    if (movieUpdateDto.UpdatedFields.Any())
+                    {
+                        var updateFields = string.Join(", ", movieUpdateDto.UpdatedFields.Select(f => $"{f.Key} = @{f.Key}"));
+                        var parameters = movieUpdateDto.UpdatedFields.Select(f =>
+                        {
+                            object value = f.Value;
+
+                            // Convert JsonElement to appropriate CLR type if needed
+                            if (value is JsonElement jsonElement)
+                            {
+                                switch (jsonElement.ValueKind)
+                                {
+                                    case JsonValueKind.String:
+                                        value = jsonElement.GetString();
+                                        break;
+                                    case JsonValueKind.Number:
+                                        value = jsonElement.GetDouble(); // Or GetInt32() if it's always an integer
+                                        break;
+                                    case JsonValueKind.True:
+                                    case JsonValueKind.False:
+                                        value = jsonElement.GetBoolean();
+                                        break;
+                                    case JsonValueKind.Null:
+                                        value = DBNull.Value;
+                                        break;
+                                    default:
+                                        throw new InvalidOperationException($"Unsupported JSON value kind: {jsonElement.ValueKind}");
+                                }
+                            }
+
+                            return new SqlParameter($"@{f.Key}", value ?? DBNull.Value);
+                        }).ToList();
+
+                        var sql = $"UPDATE Movie SET {updateFields} WHERE year = @OriginalYear AND Name = @OriginalTitle";
+                        parameters.Add(new SqlParameter("@OriginalYear", movieUpdateDto.OriginalYear));
+                        parameters.Add(new SqlParameter("@OriginalTitle", movieUpdateDto.OriginalTitle));
+
+                        await _context.Database.ExecuteSqlRawAsync(sql, parameters.ToArray());
+
+                    }
+
+                    // 3. Handle removals
+                    if (movieUpdateDto.Changes.Removed.Any())
+                    {
+                        foreach (var entry in movieUpdateDto.Changes.Removed)
+                        {
+                            var tableName = entry.Key.ToLower();
+                            var values = entry.Value;
+
+                            foreach (var value in values)
+                            {
+                                string deleteSql = tableName switch
+                                {
+                                    "actors" => "DELETE FROM Acted_In WHERE year = @Year AND Name = @Name AND ActorName = @Value",
+                                    "directors" => "DELETE FROM Directed_By WHERE year = @Year AND Name = @Name AND DirectorName = @Value",
+                                    "genres" => "DELETE FROM GenreToMovie WHERE year = @Year AND Name = @Name AND Genre = @Value",
+                                    "productioncompanies" => "DELETE FROM Produced_By WHERE year = @Year AND Name = @Name AND ProductionCompanyName = @Value",
+                                    "ratingsandscores" => "DELETE FROM MovieRating WHERE year = @Year AND Name = @Name AND RatingCompanyName = @CompanyName",
+                                    "streamingservices" => "DELETE FROM MovieStreamedOn WHERE year = @Year AND Name = @Name AND StreamingServiceName = @Value",
+                                    _ => throw new Exception($"Unknown table: {tableName}")
+                                };
+
+                                if (tableName == "ratingsandscores")
+                                {
+                                    var companyName = value.Split(':')[0];
+
+                                    await _context.Database.ExecuteSqlRawAsync(deleteSql,
+                                        new SqlParameter("@Year", movieUpdateDto.OriginalYear),
+                                        new SqlParameter("@Name", movieUpdateDto.OriginalTitle),
+                                        new SqlParameter("@CompanyName", companyName));
+                                }
+                                else
+                                {
+                                    await _context.Database.ExecuteSqlRawAsync(deleteSql,
+                                        new SqlParameter("@Year", movieUpdateDto.OriginalYear),
+                                        new SqlParameter("@Name", movieUpdateDto.OriginalTitle),
+                                        new SqlParameter("@Value", value));
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Handle additions
+                    if (movieUpdateDto.Changes.Added.Any())
+                    {
+                        foreach (var entry in movieUpdateDto.Changes.Added)
+                        {
+                            var tableName = entry.Key.ToLower();
+                            var values = entry.Value;
+
+                            foreach (var value in values)
+                            {
+                                if (tableName == "actors")
+                                {
+                                    // Check if the actor exists
+                                    var actorExists = await _context.Actors
+                                        .FromSqlRaw("SELECT * FROM Actor WHERE ActorName = @Value",
+                                                    new SqlParameter("@Value", value))
+                                        .AnyAsync();
+
+                                    if (!actorExists)
+                                    {
+                                        // Add the actor
+                                        await _context.Database.ExecuteSqlRawAsync(
+                                            "INSERT INTO Actor (ActorName) VALUES (@Value)",
+                                            new SqlParameter("@Value", value));
+                                    }
+
+                                    // Add the actor to the Acted_In table
+                                    await _context.Database.ExecuteSqlRawAsync(
+                                        "INSERT INTO Acted_In (year, Name, ActorName) VALUES (@Year, @Name, @Value)",
+                                        new SqlParameter("@Year", movieUpdateDto.OriginalYear),
+                                        new SqlParameter("@Name", movieUpdateDto.OriginalTitle),
+                                        new SqlParameter("@Value", value));
+                                }
+                                else if (tableName == "directors")
+                                {
+                                    // Check if the director exists
+                                    var directorExists = await _context.Directors
+                                        .FromSqlRaw("SELECT * FROM Director WHERE DirectorName = @Value",
+                                                    new SqlParameter("@Value", value))
+                                        .AnyAsync();
+
+                                    if (!directorExists)
+                                    {
+                                        // Add the director
+                                        await _context.Database.ExecuteSqlRawAsync(
+                                            "INSERT INTO Director (DirectorName) VALUES (@Value)",
+                                            new SqlParameter("@Value", value));
+                                    }
+
+                                    // Add the director to the Directed_By table
+                                    await _context.Database.ExecuteSqlRawAsync(
+                                        "INSERT INTO Directed_By (year, Name, DirectorName) VALUES (@Year, @Name, @Value)",
+                                        new SqlParameter("@Year", movieUpdateDto.OriginalYear),
+                                        new SqlParameter("@Name", movieUpdateDto.OriginalTitle),
+                                        new SqlParameter("@Value", value));
+                                }
+                                else if (tableName == "productioncompanies")
+                                {
+                                    // Check if the production company exists
+                                    var productionCompanyExists = await _context.ProductionCompanies
+                                        .FromSqlRaw("SELECT * FROM ProductionCompany WHERE ProductionCompanyName = @Value",
+                                                    new SqlParameter("@Value", value))
+                                        .AnyAsync();
+
+                                    if (!productionCompanyExists)
+                                    {
+                                        // Add production company
+                                        await _context.Database.ExecuteSqlRawAsync(
+                                            "INSERT INTO ProductionCompany (ProductionCompanyName) VALUES (@Value)",
+                                            new SqlParameter("@Value", value));
+                                    }
+
+                                    // Add to Produced_By
+                                    await _context.Database.ExecuteSqlRawAsync(
+                                        "INSERT INTO Produced_By (year, Name, ProductionCompanyName) VALUES (@Year, @Name, @Value)",
+                                        new SqlParameter("@Year", movieUpdateDto.OriginalYear),
+                                        new SqlParameter("@Name", movieUpdateDto.OriginalTitle),
+                                        new SqlParameter("@Value", value));
+                                }
+                                else
+                                {
+                                    // Handle other additions (genres, streaming services, ratings and scores) without checks
+                                    string insertSql = tableName switch
+                                    {
+                                        "genres" => "INSERT INTO GenreToMovie (year, Name, Genre) VALUES (@Year, @Name, @Value)",
+                                        "streamingservices" => "INSERT INTO MovieStreamedOn (year, Name, StreamingServiceName) VALUES (@Year, @Name, @Value)",
+                                        "ratingsandscores" => "INSERT INTO MovieRating (year, Name, RatingCompanyName, Score) VALUES (@Year, @Name, @CompanyName, @Score)",
+                                        _ => throw new Exception($"Unknown table: {tableName}")
+                                    };
+
+                                    if (tableName == "ratingsandscores")
+                                    {
+                                        var parts = value.Split(':');
+                                        var companyName = parts[0];
+                                        var score = parts[1];
+
+                                        await _context.Database.ExecuteSqlRawAsync(insertSql,
+                                            new SqlParameter("@Year", movieUpdateDto.OriginalYear),
+                                            new SqlParameter("@Name", movieUpdateDto.OriginalTitle),
+                                            new SqlParameter("@CompanyName", companyName),
+                                            new SqlParameter("@Score", score));
+                                    }
+                                    else
+                                    {
+                                        await _context.Database.ExecuteSqlRawAsync(insertSql,
+                                            new SqlParameter("@Year", movieUpdateDto.OriginalYear),
+                                            new SqlParameter("@Name", movieUpdateDto.OriginalTitle),
+                                            new SqlParameter("@Value", value));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+
+
+                    // Commit the transaction
+                    await transaction.CommitAsync();
+                    return NoContent();
+                }
+                catch (Exception ex)
+                {
+                    // Rollback the transaction in case of error
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { Error = ex.Message });
+                }
+            }
+        }
 
 
 
@@ -288,22 +691,22 @@ namespace MovieFinderAPI.Controllers
             string apiHost = "streaming-availability.p.rapidapi.com";
 
 
-        var client = new HttpClient();
-        client.DefaultRequestHeaders.Add("x-rapidapi-key", apiKey);
-        client.DefaultRequestHeaders.Add("x-rapidapi-host", apiHost);
+            var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("x-rapidapi-key", apiKey);
+            client.DefaultRequestHeaders.Add("x-rapidapi-host", apiHost);
 
-        string baseUrl = "https://streaming-availability.p.rapidapi.com/shows/search/filters";
-        string country = "ca";
-        string seriesGranularity = "show";
-        string orderDirection = "asc";
-        string orderBy = "original_title";
-        string outputLanguage = "en";
-        string showType = "movie";
-        string nextCursor = null;
-        bool hasMore = true;
+            string baseUrl = "https://streaming-availability.p.rapidapi.com/shows/search/filters";
+            string country = "ca";
+            string seriesGranularity = "show";
+            string orderDirection = "asc";
+            string orderBy = "original_title";
+            string outputLanguage = "en";
+            string showType = "movie";
+            string nextCursor = null;
+            bool hasMore = true;
 
-        int movieLimit = 1000; // Set your desired movie limit
-        int moviesProcessed = 0;
+            int movieLimit = 1000; // Set your desired movie limit
+            int moviesProcessed = 0;
 
             try
             {
@@ -522,7 +925,7 @@ namespace MovieFinderAPI.Controllers
                             // Insert actor
                             await _context.Database.ExecuteSqlRawAsync(
                                 "INSERT INTO Actor (ActorName, Age, Gender) VALUES (@p0, @p1, @p2)",
-                                actorName,null,null
+                                actorName, null, null
                             );
                         }
 
@@ -658,7 +1061,7 @@ namespace MovieFinderAPI.Controllers
                             RatingScale = "varies" // or any appropriate scale description
                         };
                         _context.RatingCompanies.Add(ratingCompany);
-                        
+
                     }
                     var ratingExists = await _context.MovieRatings
                         .AnyAsync(r => r.Year == movieEntity1.Year && r.Name == movieEntity1.Name && r.RatingCompanyName == "IMDB");
@@ -723,30 +1126,30 @@ namespace MovieFinderAPI.Controllers
                 {
 
                     // Check if the actor already exists
-                    if (!nameOfActors.Contains(actorName) && actorName !=null) { 
-                   
-                    var actorExists = await _context.Actors.AnyAsync(a => a.ActorName == actorName);
-                    Actor actor;
-                    if (actorExists)
-                    {
-                        actor = await _context.Actors.FirstAsync(a => a.ActorName == actorName);
-                    }
-                    else
-                    {
-                        actor = new Actor { ActorName = actorName };
-                        _context.Actors.Add(actor);
-                    }
+                    if (!nameOfActors.Contains(actorName) && actorName != null) {
 
-                    // Create the relationship
-                    var actedIn = new ActedIn
-                    {
-                        Year = movieEntity.Year,
-                        Name = movieEntity.Name,
-                        ActorName = actorName,
-                        Actor = actor,
-                        Movie = movieEntity
-                    };
-                    _context.ActedIns.Add(actedIn);
+                        var actorExists = await _context.Actors.AnyAsync(a => a.ActorName == actorName);
+                        Actor actor;
+                        if (actorExists)
+                        {
+                            actor = await _context.Actors.FirstAsync(a => a.ActorName == actorName);
+                        }
+                        else
+                        {
+                            actor = new Actor { ActorName = actorName };
+                            _context.Actors.Add(actor);
+                        }
+
+                        // Create the relationship
+                        var actedIn = new ActedIn
+                        {
+                            Year = movieEntity.Year,
+                            Name = movieEntity.Name,
+                            ActorName = actorName,
+                            Actor = actor,
+                            Movie = movieEntity
+                        };
+                        _context.ActedIns.Add(actedIn);
                         nameOfActors.Add(actorName);
                     }
 
@@ -797,7 +1200,7 @@ namespace MovieFinderAPI.Controllers
 
 
 
-            
+
 
 
             // Process Streaming Services
@@ -835,7 +1238,7 @@ namespace MovieFinderAPI.Controllers
                     }
                 }
             }
-           
+
 
             // Add the movie to the context
             _context.Movies.Add(movieEntity);
@@ -844,6 +1247,181 @@ namespace MovieFinderAPI.Controllers
             await _context.SaveChangesAsync();
         }
 
+
+        [HttpPost("searchMovieTitleAndYear")]
+        public async Task<ActionResult<MovieSearchDetails>> GetMovie([FromBody] SearchMovie movie)
+        {
+            MovieSearchDetails movieSearchResult = null;
+
+            using (var connection = _context.Database.GetDbConnection())
+            {
+                await connection.OpenAsync();
+
+                // First, get the basic movie details
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = "SELECT * FROM Movie WHERE year = @yearSearch AND Name = @nameSearch";
+                    command.Parameters.Add(new SqlParameter("@yearSearch", movie.Year));
+                    command.Parameters.Add(new SqlParameter("@nameSearch", movie.Name));
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        if (await reader.ReadAsync())
+                        {
+                            movieSearchResult = new MovieSearchDetails
+                            {
+                                Title = reader["Name"] != DBNull.Value ? reader["Name"].ToString() : null,
+                                Year = reader["year"] != DBNull.Value ? (int?)reader["year"] : null,
+                                DurationMins = reader["DurationMins"] != DBNull.Value ? (int?)reader["DurationMins"] : null,
+                                Description = reader["Description"] != DBNull.Value ? reader["Description"].ToString() : null,
+                                Image = reader["Image"] != DBNull.Value ? reader["Image"].ToString() : null
+                            };
+                        }
+                        else
+                        {
+                            return NotFound();
+                        }
+                    }
+                }
+
+                // Now get the actors
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = @"
+                SELECT A.ActorName
+                FROM Acted_In AI
+                INNER JOIN Actor A ON AI.ActorName = A.ActorName
+                WHERE AI.year = @yearSearch AND AI.Name = @nameSearch";
+                    command.Parameters.Add(new SqlParameter("@yearSearch", movie.Year));
+                    command.Parameters.Add(new SqlParameter("@nameSearch", movie.Name));
+
+                    var actors = new List<string>();
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            actors.Add(reader["ActorName"].ToString());
+                        }
+                    }
+
+                    movieSearchResult.Actors = string.Join(",", actors);
+                }
+
+                // Now get the directors
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = @"
+                SELECT D.DirectorName
+                FROM Directed_By DB
+                INNER JOIN Director D ON DB.DirectorName = D.DirectorName
+                WHERE DB.year = @yearSearch AND DB.Name = @nameSearch";
+                    command.Parameters.Add(new SqlParameter("@yearSearch", movie.Year));
+                    command.Parameters.Add(new SqlParameter("@nameSearch", movie.Name));
+
+                    var directors = new List<string>();
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            directors.Add(reader["DirectorName"].ToString());
+                        }
+                    }
+
+                    movieSearchResult.Directors = string.Join(",", directors);
+                }
+
+                // Now get the streaming services
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = @"
+                SELECT MS.StreamingServiceName
+                FROM MovieStreamedOn MS
+                WHERE MS.year = @yearSearch AND MS.Name = @nameSearch";
+                    command.Parameters.Add(new SqlParameter("@yearSearch", movie.Year));
+                    command.Parameters.Add(new SqlParameter("@nameSearch", movie.Name));
+
+                    var streamingServices = new List<string>();
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            streamingServices.Add(reader["StreamingServiceName"].ToString());
+                        }
+                    }
+
+                    movieSearchResult.StreamingServices = string.Join(",", streamingServices);
+                }
+
+                // Now get the genres
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = @"
+                SELECT GTM.Genre
+                FROM GenreToMovie GTM
+                WHERE GTM.year = @yearSearch AND GTM.Name = @nameSearch";
+                    command.Parameters.Add(new SqlParameter("@yearSearch", movie.Year));
+                    command.Parameters.Add(new SqlParameter("@nameSearch", movie.Name));
+
+                    var genres = new List<string>();
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            genres.Add(reader["Genre"].ToString());
+                        }
+                    }
+
+                    movieSearchResult.Genres = string.Join(",", genres);
+                }
+
+                // Now get the ratings and scores
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = @"
+                SELECT MR.RatingCompanyName, MR.Score
+                FROM MovieRating MR
+                WHERE MR.year = @yearSearch AND MR.Name = @nameSearch";
+                    command.Parameters.Add(new SqlParameter("@yearSearch", movie.Year));
+                    command.Parameters.Add(new SqlParameter("@nameSearch", movie.Name));
+
+                    var ratingsAndScores = new List<string>();
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            var ratingCompany = reader["RatingCompanyName"].ToString();
+                            var score = reader["Score"].ToString();
+                            ratingsAndScores.Add($"{ratingCompany}:{score}");
+                        }
+                    }
+
+                    movieSearchResult.RatingsAndScores = string.Join(",", ratingsAndScores);
+                }
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = @"
+            SELECT PC.ProductionCompanyName
+            FROM Produced_By PB
+            INNER JOIN ProductionCompany PC ON PB.ProductionCompanyName = PC.ProductionCompanyName
+            WHERE PB.year = @yearSearch AND PB.Name = @nameSearch";
+                    command.Parameters.Add(new SqlParameter("@yearSearch", movie.Year));
+                    command.Parameters.Add(new SqlParameter("@nameSearch", movie.Name));
+
+                    var productionCompanies = new List<string>();
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            productionCompanies.Add(reader["ProductionCompanyName"].ToString());
+                        }
+                    }
+
+                    movieSearchResult.ProductionCompanies = string.Join(",", productionCompanies);
+                }
+            }
+
+            return Ok(movieSearchResult);
+        }
 
         //---------------------------------------------
 

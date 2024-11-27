@@ -140,3 +140,4 @@ C:\Users\Brett\source\repos\MovieFinderAPI\MovieFinderAPI\obj\Debug\net8.0\refin
 C:\Users\Brett\source\repos\MovieFinderAPI\MovieFinderAPI\obj\Debug\net8.0\MovieFinderAPI.pdb
 C:\Users\Brett\source\repos\MovieFinderAPI\MovieFinderAPI\obj\Debug\net8.0\MovieFinderAPI.genruntimeconfig.cache
 C:\Users\Brett\source\repos\MovieFinderAPI\MovieFinderAPI\obj\Debug\net8.0\ref\MovieFinderAPI.dll
+C:\Users\Brett\source\repos\MovieFinderAPI\MovieFinderAPI\obj\Debug\net8.0\MovieFinderAPI.sourcelink.json

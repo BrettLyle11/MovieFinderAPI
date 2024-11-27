@@ -276,6 +276,58 @@
   },
   {
     "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "GetProductionCompanyName",
+    "RelativePath": "api/Movies/GetSuggestProductionCompanies/{productionCompanyname}",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "productionCompanyname",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IEnumerable\u00601[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "GetAdminMovieHistory",
+    "RelativePath": "api/Movies/GrabUpdateHistory",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "movie",
+        "Type": "MovieFinderAPI.Models.DTO.MovieNameAndYearDTO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.List\u00601[[MovieFinderAPI.Models.DTO.ManagesMoviesDTO, MovieFinderAPI, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
     "Method": "login",
     "RelativePath": "api/Movies/Login",
     "HttpMethod": "POST",
@@ -325,6 +377,22 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "AddNewRatingCompany",
+    "RelativePath": "api/Movies/NewRatingScale",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "ratingScale",
+        "Type": "MovieFinderAPI.Models.DTO.RatingScale",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
@@ -380,6 +448,58 @@
   },
   {
     "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "getMovieNames",
+    "RelativePath": "api/Movies/searchMovieName/{searchName}",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "searchName",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IEnumerable\u00601[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "GetMovie",
+    "RelativePath": "api/Movies/searchMovieTitleAndYear",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "movie",
+        "Type": "MovieFinderAPI.Models.SearchMovie",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "MovieFinderAPI.Models.MovieSearchDetails",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
     "Method": "GetNextUserId",
     "RelativePath": "api/Movies/Sign-Up",
     "HttpMethod": "POST",
@@ -402,6 +522,22 @@
     "IsController": true,
     "Order": 0,
     "Parameters": [],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "UpdateMovieAsync",
+    "RelativePath": "api/Movies/update",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "movieUpdateDto",
+        "Type": "MovieFinderAPI.Models.DTO.MovieUpdateDTO",
+        "IsRequired": true
+      }
+    ],
     "ReturnTypes": []
   },
   {
