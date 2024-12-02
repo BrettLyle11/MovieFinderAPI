@@ -256,6 +256,22 @@
   },
   {
     "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "CreateMovie",
+    "RelativePath": "api/Movies/createMovie",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "newMovie",
+        "Type": "MovieFinderAPI.Models.DTO.MovieDTO",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
     "Method": "GetAllRatingCompanies",
     "RelativePath": "api/Movies/getAllRatingCompanies",
     "HttpMethod": "GET",
@@ -291,6 +307,32 @@
     "ReturnTypes": [
       {
         "Type": "System.Collections.Generic.IEnumerable\u00601[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "GetUser",
+    "RelativePath": "api/Movies/getUser/{user}",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "user",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "MovieFinderAPI.Models.DTO.UserDTOWPssw",
         "MediaTypes": [
           "text/plain",
           "application/json",
@@ -500,6 +542,32 @@
   },
   {
     "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "GetListOfUseremail",
+    "RelativePath": "api/Movies/searchUsers/{userEmail}",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "userEmail",
+        "Type": "System.String",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.IEnumerable\u00601[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
     "Method": "GetNextUserId",
     "RelativePath": "api/Movies/Sign-Up",
     "HttpMethod": "POST",
@@ -539,6 +607,58 @@
       }
     ],
     "ReturnTypes": []
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "UpdateUser",
+    "RelativePath": "api/Movies/updateUser",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "user",
+        "Type": "MovieFinderAPI.Models.DTO.UserDTOWPssw",
+        "IsRequired": true
+      },
+      {
+        "Name": "AdminID",
+        "Type": "System.Int32",
+        "IsRequired": false
+      },
+      {
+        "Name": "Username",
+        "Type": "System.String",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "MovieFinderAPI.Controllers.MoviesController",
+    "Method": "GetUserUpdateHistory",
+    "RelativePath": "api/Movies/userUpdateHistory/{userId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "userId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "System.Collections.Generic.List\u00601[[MovieFinderAPI.Models.DTO.UserUpdateHistory, MovieFinderAPI, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
   },
   {
     "ContainingType": "MovieFinderAPI.Controllers.WeatherForecastController",

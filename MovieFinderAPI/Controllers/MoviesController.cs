@@ -234,6 +234,38 @@ namespace MovieFinderAPI.Controllers
             return Ok(directorNames);
         }
 
+        [HttpPost("searchUsers/{userEmail}")]
+        public async Task<ActionResult<IEnumerable<string>>> GetListOfUseremail([FromRoute] string userEmail)
+        {
+            if (string.IsNullOrWhiteSpace(userEmail))
+            {
+                return BadRequest(" userEmail can't be null");
+            }
+
+            var sql = "SELECT Email FROM MovieFinderUser WHERE Email LIKE @email";
+            var emailParam = new SqlParameter("@email", $"%{userEmail}%");
+            var emailList = new List<string>();
+            using(var connection = _context.Database.GetDbConnection())
+            {
+                await connection.OpenAsync();
+
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = sql;
+                    command.Parameters.Add(emailParam);
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            emailList.Add(reader.GetString(0));
+                        }
+                    }
+                }
+
+            }
+                return Ok(emailList);
+        }
+
         [HttpGet("getAllRatingCompanies")]
         public async Task<ActionResult<IEnumerable<RatingCompanyDto>>> GetAllRatingCompanies()
         {
@@ -265,6 +297,150 @@ namespace MovieFinderAPI.Controllers
 
             // Return the list of rating companies with names and scales
             return Ok(ratingCompanies);
+        }
+
+        [HttpPost("getUser/{user}")]
+        public async Task<ActionResult<UserDTOWPssw>> GetUser([FromRoute] string user)
+        {
+            if (string.IsNullOrWhiteSpace(user))
+            {
+                return BadRequest("User name cannot be empty.");
+            }
+
+            var sql = "SELECT * FROM MovieFinderUser WHERE Email = @user";
+
+            var userParam = new SqlParameter("@user", user);
+
+            using (var connection = _context.Database.GetDbConnection())
+            {
+                await connection.OpenAsync();
+
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = sql;
+                    command.Parameters.Add(userParam);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        if (await reader.ReadAsync())
+                        {
+                            var userDto = new UserDTOWPssw
+                            {
+                                Id = reader.GetInt32(reader.GetOrdinal("UserID")),
+                                Username = reader.GetString(reader.GetOrdinal("Username")),
+                                Email = reader.GetString(reader.GetOrdinal("Email")),
+                                FavouriteGenre = reader.GetString(reader.GetOrdinal("FavouriteGenre")),
+                                Password = reader.GetString(reader.GetOrdinal("Password"))
+                            };
+
+                            return Ok(userDto);
+                        }
+                    }
+                }
+            }
+
+            return NotFound();
+        }
+
+        [HttpGet("userUpdateHistory/{userId}")]
+        public async Task<ActionResult<List<UserUpdateHistory>>> GetUserUpdateHistory([FromRoute] int userId)
+        {
+            if (userId <= 0)
+            {
+                return BadRequest("Invalid user ID.");
+            }
+
+            try
+            {
+                var updateHistory = new List<UserUpdateHistory>();
+
+                using (var connection = _context.Database.GetDbConnection())
+                {
+                    await connection.OpenAsync();
+
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = @"
+                SELECT 
+                    mu.AdminID,
+                    a.Username AS AdminUsername,
+                    mu.Date
+                FROM 
+                    Manages_User mu
+                JOIN 
+                    Admin a ON a.AdminID = mu.AdminID
+                WHERE 
+                    mu.UserID = @UserID
+                ORDER BY 
+                    mu.Date DESC";
+
+                        // Add parameter for user ID
+                        command.Parameters.Add(new SqlParameter("@UserID", userId));
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                updateHistory.Add(new UserUpdateHistory
+                                {
+                                    AdminID = reader.GetInt32(reader.GetOrdinal("AdminID")),
+                                    AdminUsername = reader.GetString(reader.GetOrdinal("AdminUsername")),
+                                    Date = reader.GetDateTime(reader.GetOrdinal("Date"))
+                                });
+                            }
+                        }
+                    }
+                }
+
+                return Ok(updateHistory);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Error = ex.Message });
+            }
+        }
+
+        [HttpPost("updateUser")]
+        public async Task<ActionResult> UpdateUser([FromBody] UserDTOWPssw user, [FromQuery] AdminDTO admin)
+        {
+            var sql = "UPDATE MovieFinderUser SET Email = @Email, Username = @Username, Password = @Password, FavouriteGenre = @FavouriteGenre WHERE UserID = @UserID";
+             var insertManagesUserSql = "INSERT INTO Manages_User (AdminID, UserID, Date) VALUES (@AdminID, @UserID, @Date)";
+            try
+            {
+                using (var connection = _context.Database.GetDbConnection())
+                {
+                    await connection.OpenAsync();
+
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = sql;
+
+                        // Add parameters individually
+                        command.Parameters.Add(new SqlParameter("@Email", user.Email));
+                        command.Parameters.Add(new SqlParameter("@Username", user.Username));
+                        command.Parameters.Add(new SqlParameter("@Password", user.Password));
+                        command.Parameters.Add(new SqlParameter("@FavouriteGenre", user.FavouriteGenre));
+                        command.Parameters.Add(new SqlParameter("@UserID", user.Id)); 
+
+                        await command.ExecuteNonQueryAsync(); 
+                    }
+                    using(var insertCommand = connection.CreateCommand()){
+                        insertCommand.CommandText = insertManagesUserSql;
+                        insertCommand.Parameters.Add(new SqlParameter("@AdminID", admin.AdminID));
+                        insertCommand.Parameters.Add(new SqlParameter("@UserID", user.Id));
+                        insertCommand.Parameters.Add(new SqlParameter("@Date", DateTime.UtcNow)); 
+
+                        await insertCommand.ExecuteNonQueryAsync();
+                    }
+
+                }
+
+                return Ok();
+            }
+            catch (Exception e)
+            {
+                return StatusCode(500, new { error = e.Message });
+            }
         }
 
 
@@ -384,6 +560,185 @@ namespace MovieFinderAPI.Controllers
             catch (Exception ex)
             {
                 return BadRequest(new { Error = ex.Message });
+            }
+        }
+
+        [HttpPost("createMovie")]
+        public async Task<IActionResult> CreateMovie([FromBody] MovieDTO newMovie)
+        {
+            if (newMovie == null)
+            {
+                return BadRequest("Movie data is required.");
+            }
+
+            using (var transaction = await _context.Database.BeginTransactionAsync())
+            {
+                try
+                {
+                    // Insert into Movie table
+                    await _context.Database.ExecuteSqlRawAsync(@"
+                INSERT INTO Movie (Name, Year, DurationMins, Description, Image)
+                VALUES (@Name, @Year, @DurationMins, @Description, @Image)",
+                        new SqlParameter("@Name", newMovie.Title),
+                        new SqlParameter("@Year", newMovie.Year),
+                        new SqlParameter("@DurationMins", newMovie.DurationMins),
+                        new SqlParameter("@Description", newMovie.Description),
+                        new SqlParameter("@Image", newMovie.Image));
+
+                    // Insert actors
+                    if (!string.IsNullOrEmpty(newMovie.Actors))
+                    {
+                        var actors = newMovie.Actors.Split(',');
+                        foreach (var actor in actors)
+                        {
+                            var actorTrimmed = actor.Trim();
+
+                            // Check if actor exists
+                            var actorExists = await _context.Actors
+                                .FromSqlRaw("SELECT * FROM Actor WHERE ActorName = @ActorName",
+                                    new SqlParameter("@ActorName", actorTrimmed))
+                                .AnyAsync();
+
+                            // Insert into Actor table if not exists
+                            if (!actorExists)
+                            {
+                                await _context.Database.ExecuteSqlRawAsync(@"
+                            INSERT INTO Actor (ActorName) VALUES (@ActorName)",
+                                    new SqlParameter("@ActorName", actorTrimmed));
+                            }
+
+                            // Insert into Acted_In table
+                            await _context.Database.ExecuteSqlRawAsync(@"
+                        INSERT INTO Acted_In (Year, Name, ActorName)
+                        VALUES (@Year, @Name, @ActorName)",
+                                new SqlParameter("@Year", newMovie.Year),
+                                new SqlParameter("@Name", newMovie.Title),
+                                new SqlParameter("@ActorName", actorTrimmed));
+                        }
+                    }
+
+                    // Insert directors
+                    if (!string.IsNullOrEmpty(newMovie.Directors))
+                    {
+                        var directors = newMovie.Directors.Split(',');
+                        foreach (var director in directors)
+                        {
+                            var directorTrimmed = director.Trim();
+
+                            // Check if director exists
+                            var directorExists = await _context.Directors
+                                .FromSqlRaw("SELECT * FROM Director WHERE DirectorName = @DirectorName",
+                                    new SqlParameter("@DirectorName", directorTrimmed))
+                                .AnyAsync();
+
+                            // Insert into Director table if not exists
+                            if (!directorExists)
+                            {
+                                await _context.Database.ExecuteSqlRawAsync(@"
+                            INSERT INTO Director (DirectorName) VALUES (@DirectorName)",
+                                    new SqlParameter("@DirectorName", directorTrimmed));
+                            }
+
+                            // Insert into Directed_By table
+                            await _context.Database.ExecuteSqlRawAsync(@"
+                        INSERT INTO Directed_By (Year, Name, DirectorName)
+                        VALUES (@Year, @Name, @DirectorName)",
+                                new SqlParameter("@Year", newMovie.Year),
+                                new SqlParameter("@Name", newMovie.Title),
+                                new SqlParameter("@DirectorName", directorTrimmed));
+                        }
+                    }
+
+                    // Insert genres
+                    if (!string.IsNullOrEmpty(newMovie.Genres))
+                    {
+                        var genres = newMovie.Genres.Split(',');
+                        foreach (var genre in genres)
+                        {
+                            await _context.Database.ExecuteSqlRawAsync(@"
+                        INSERT INTO GenreToMovie (Year, Name, Genre)
+                        VALUES (@Year, @Name, @Genre)",
+                                new SqlParameter("@Year", newMovie.Year),
+                                new SqlParameter("@Name", newMovie.Title),
+                                new SqlParameter("@Genre", genre.Trim()));
+                        }
+                    }
+
+                    // Insert streaming services
+                    if (!string.IsNullOrEmpty(newMovie.StreamingServices))
+                    {
+                        var services = newMovie.StreamingServices.Split(',');
+                        foreach (var service in services)
+                        {
+                            await _context.Database.ExecuteSqlRawAsync(@"
+                        INSERT INTO MovieStreamedOn (Year, Name, StreamingServiceName)
+                        VALUES (@Year, @Name, @ServiceName)",
+                                new SqlParameter("@Year", newMovie.Year),
+                                new SqlParameter("@Name", newMovie.Title),
+                                new SqlParameter("@ServiceName", service.Trim()));
+                        }
+                    }
+
+                    // Insert production companies
+                    if (!string.IsNullOrEmpty(newMovie.ProductionCompanies))
+                    {
+                        var companies = newMovie.ProductionCompanies.Split(',');
+                        foreach (var company in companies)
+                        {
+                            var companyTrimmed = company.Trim();
+
+                            // Check if company exists
+                            var companyExists = await _context.ProductionCompanies
+                                .FromSqlRaw("SELECT * FROM ProductionCompany WHERE ProductionCompanyName = @CompanyName",
+                                    new SqlParameter("@CompanyName", companyTrimmed))
+                                .AnyAsync();
+
+                            // Insert into ProductionCompany table if not exists
+                            if (!companyExists)
+                            {
+                                await _context.Database.ExecuteSqlRawAsync(@"
+                            INSERT INTO ProductionCompany (ProductionCompanyName) VALUES (@CompanyName)",
+                                    new SqlParameter("@CompanyName", companyTrimmed));
+                            }
+
+                            // Insert into Produced_By table
+                            await _context.Database.ExecuteSqlRawAsync(@"
+                        INSERT INTO Produced_By (Year, Name, ProductionCompanyName)
+                        VALUES (@Year, @Name, @CompanyName)",
+                                new SqlParameter("@Year", newMovie.Year),
+                                new SqlParameter("@Name", newMovie.Title),
+                                new SqlParameter("@CompanyName", companyTrimmed));
+                        }
+                    }
+
+                    // Insert ratings
+                    if (!string.IsNullOrEmpty(newMovie.RatingsAndScores))
+                    {
+                        var ratings = newMovie.RatingsAndScores.Split(',');
+                        foreach (var rating in ratings)
+                        {
+                            var parts = rating.Split(':');
+                            var company = parts[0].Trim();
+                            var score = parts[1].Trim();
+
+                            await _context.Database.ExecuteSqlRawAsync(@"
+                        INSERT INTO MovieRating (Year, Name, RatingCompanyName, Score)
+                        VALUES (@Year, @Name, @CompanyName, @Score)",
+                                new SqlParameter("@Year", newMovie.Year),
+                                new SqlParameter("@Name", newMovie.Title),
+                                new SqlParameter("@CompanyName", company),
+                                new SqlParameter("@Score", score));
+                        }
+                    }
+
+                    await transaction.CommitAsync();
+                    return Ok();
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return StatusCode(500, new { Error = ex.Message });
+                }
             }
         }
 
