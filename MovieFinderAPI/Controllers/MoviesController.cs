@@ -1920,6 +1920,48 @@ namespace MovieFinderAPI.Controllers
             }
         }
 
+        [HttpPost("createPlaylist")]
+        public async Task<IActionResult> CreatePlaylistAsync([FromBody] CreatePlaylistRequest request)
+        {
+            var result = await _context.Database.ExecuteSqlRawAsync(
+                "INSERT INTO Playlist (userID, PlaylistName) VALUES (@p0, @p1)",
+                request.UserId, request.Name);
+
+            if (result > 0)
+            {
+                return Ok("Playlist created successfully.");
+            }
+            else
+            {
+                return StatusCode(500, "An error occurred while adding the relationship.");
+            }
+        }
+
+        [HttpGet("getPlaylists")]
+        public async Task<ActionResult<IEnumerable<Playlist>>> GetPlaylistsAsync([FromQuery] int userID)
+        {
+            if (userID <= 0)
+            {
+                return BadRequest("Invalid user ID");
+            }
+
+            var sql = "SELECT * FROM Playlist WHERE  UserID = @p0";
+
+            // Execute the query and map results to the entity
+            var playlists = await _context.Playlists
+                .FromSqlRaw(sql, userID)
+                .ToListAsync();
+
+            //var playlists = _context.Playlists.Where(p => p.UserID == userID).ToList();
+
+            if (playlists == null || !playlists.Any())
+            {
+                return NotFound("No playlists found for the given user ID");
+            }
+
+            return Ok(playlists);
+        }
+
         [HttpPut("BIGTEST")]
         public async Task<ActionResult> addSomeBullShit()
         {
