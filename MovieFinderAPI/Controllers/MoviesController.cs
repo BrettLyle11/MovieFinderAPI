@@ -1952,8 +1952,6 @@ namespace MovieFinderAPI.Controllers
                 .FromSqlRaw(sql, userID)
                 .ToListAsync();
 
-            //var playlists = _context.Playlists.Where(p => p.UserID == userID).ToList();
-
             if (playlists == null || !playlists.Any())
             {
                 return NotFound("No playlists found for the given user ID");
@@ -1993,6 +1991,59 @@ namespace MovieFinderAPI.Controllers
             else
             {
                 return StatusCode(500, "An error occurred while adding the relationship.");
+            }
+        }
+
+        [HttpGet("getPlaylistMovies")]
+        public async Task<ActionResult<IEnumerable<Playlist>>> GetPlaylistMovies([FromQuery] int userID, string playlistName)
+        {
+            if (userID <= 0)
+            {
+                return BadRequest("Invalid user ID");
+            }
+
+            var sql = "SELECT * FROM PlaylistMovies WHERE  UserID = @p0 AND PlaylistName = @p1";
+
+            // Execute the query and map results to the entity
+            var playlists = await _context.PlaylistMovies
+                .FromSqlRaw(sql, userID, playlistName)
+                .ToListAsync();
+
+            if (playlists == null || !playlists.Any())
+            {
+                return NotFound("No playlists found for the given user ID");
+            }
+
+            return Ok(playlists);
+        }
+
+        [HttpDelete("deletePlaylist")]
+        public async Task<IActionResult> DeletePlaylist([FromQuery] int userID, string playlistName)
+        {
+            if (userID <= 0)
+            {
+                return BadRequest("Invalid user ID");
+            }
+
+            var sql = "DELETE FROM Playlist WHERE UserID = @p0 AND PlaylistName = @p1";
+
+            try
+            {
+                // Execute the delete command
+                var result = await _context.Database.ExecuteSqlRawAsync(sql, userID, playlistName);
+
+                if (result == 0)
+                {
+                    return NotFound("No playlist found for the given user ID and playlist name");
+                }
+
+                return Ok("Playlist deleted successfully");
+            }
+            catch (Exception ex)
+            {
+                // Log the exception
+                Console.WriteLine($"Error: {ex.Message}");
+                return StatusCode(500, "An error occurred while deleting the playlist.");
             }
         }
 

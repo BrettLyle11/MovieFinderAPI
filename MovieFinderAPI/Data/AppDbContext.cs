@@ -24,6 +24,7 @@ namespace MovieFinderAPI.Data
         public DbSet<MovieFinderUser> MovieFinderUsers { get; set; }
         public DbSet<WatchHistory> WatchHistories { get; set; }
         public DbSet<Playlist> Playlists { get; set; }
+        public DbSet<PlaylistMovies> PlaylistMovies { get; set; }
         public DbSet<Admin> Admins { get; set; }
         public DbSet<ManagesUser> ManagesUsers { get; set; }
         public DbSet<ManagesMovie> ManagesMovies { get; set; }
@@ -225,6 +226,15 @@ namespace MovieFinderAPI.Data
                 entity.HasOne(e => e.MovieFinderUser)
                     .WithMany(u => u.Playlists)
                     .HasForeignKey(e => e.UserID);
+
+                entity.Property(e => e.PlaylistName).HasMaxLength(100).IsRequired();
+            });
+
+            // PlaylistMovies
+            modelBuilder.Entity<PlaylistMovies>(entity =>
+            {
+                entity.HasKey(e => new { e.UserID, e.PlaylistName });
+
 
                 entity.Property(e => e.PlaylistName).HasMaxLength(100).IsRequired();
             });
