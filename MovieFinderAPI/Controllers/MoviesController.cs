@@ -1929,7 +1929,7 @@ namespace MovieFinderAPI.Controllers
 
             if (result > 0)
             {
-                return Ok("Playlist created successfully.");
+                return Ok();
             }
             else
             {
@@ -1960,6 +1960,40 @@ namespace MovieFinderAPI.Controllers
             }
 
             return Ok(playlists);
+        }
+
+        [HttpPost("addMovieToPlaylist")]
+        public async Task<IActionResult> AddMovieToPlaylist([FromBody] AddMovieToPlaylist request)
+        {
+            var result = await _context.Database.ExecuteSqlRawAsync(
+                "INSERT INTO PlaylistMovies (UserID, PlaylistName, Year, Name) VALUES (@p0, @p1, @p2, @p3)",
+                request.UserId, request.playlistName, request.movieYear, request.movieName);
+
+            if (result > 0)
+            {
+                return Ok();
+            }
+            else
+            {
+                return StatusCode(500, "An error occurred while adding the relationship.");
+            }
+        }
+
+        [HttpPost("updatePlaylistTime")]
+        public async Task<IActionResult> UpdatePlaylistTime([FromBody] UpdatePlaylistTime request)
+        {
+            var result = await _context.Database.ExecuteSqlRawAsync(
+                "UPDATE PlayList SET WatchTime = COALESCE(WatchTime, 0) + @p2 WHERE UserID = @p0 AND PlaylistName = @p1",
+                request.UserId, request.playlistName, request.duration);
+
+            if (result > 0)
+            {
+                return Ok();
+            }
+            else
+            {
+                return StatusCode(500, "An error occurred while adding the relationship.");
+            }
         }
 
         [HttpPut("BIGTEST")]
