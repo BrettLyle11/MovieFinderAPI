@@ -2009,10 +2009,10 @@ namespace MovieFinderAPI.Controllers
                 .FromSqlRaw(sql, userID, playlistName)
                 .ToListAsync();
 
-            if (playlists == null || !playlists.Any())
-            {
-                return NotFound("No playlists found for the given user ID");
-            }
+            //if (playlists == null || !playlists.Any())
+            //{
+            //    return NotFound("No playlists found for the given user ID");
+            //}
 
             return Ok(playlists);
         }
@@ -2044,6 +2044,165 @@ namespace MovieFinderAPI.Controllers
                 // Log the exception
                 Console.WriteLine($"Error: {ex.Message}");
                 return StatusCode(500, "An error occurred while deleting the playlist.");
+            }
+        }
+
+        [HttpDelete("deleteAllMoviesFromPlaylist")]
+        public async Task<IActionResult> DeleteAllMoviesFromPlaylist([FromQuery] int userId, [FromQuery] string playlistName)
+        {
+            if (userId <= 0 || string.IsNullOrWhiteSpace(playlistName))
+            {
+                return BadRequest("Invalid user ID or playlist name.");
+            }
+
+            var deleteSql = "DELETE FROM PlaylistMovies WHERE UserID = @UserId AND PlaylistName = @PlaylistName";
+
+            try
+            {
+                // Execute the delete command
+                var result = await _context.Database.ExecuteSqlRawAsync(deleteSql,
+                    new SqlParameter("@UserId", userId),
+                    new SqlParameter("@PlaylistName", playlistName));
+
+                if (result == 0)
+                {
+                    return NotFound("No movies found for the given user ID and playlist name.");
+                }
+
+                return Ok("All movies deleted from the playlist successfully.");
+            }
+            catch (Exception ex)
+            {
+                // Log the exception
+                Console.WriteLine($"Error: {ex.Message}");
+                return StatusCode(500, "An error occurred while deleting movies from the playlist.");
+            }
+        }
+
+        [HttpGet("getMoviesInPlaylist")]
+        public async Task<ActionResult<IEnumerable<MovieSearchDetails>>> GetMoviesInPlaylist([FromQuery] int userId, [FromQuery] string playlistName)
+        {
+            if (userId <= 0 || string.IsNullOrWhiteSpace(playlistName))
+            {
+                return BadRequest("Invalid user ID or playlist name.");
+            }
+
+            var sql = @"
+        SELECT 
+            m.Name AS Title,
+            m.Year,
+            m.DurationMins,
+            m.Description,
+            m.Image,
+            STRING_AGG(a.ActorName, ',') AS Actors,
+            STRING_AGG(d.DirectorName, ',') AS Directors,
+            STRING_AGG(ms.StreamingServiceName, ',') AS StreamingServices,
+            STRING_AGG(g.Genre, ',') AS Genres,
+            STRING_AGG(CONCAT(r.RatingCompanyName, ':', r.Score), ',') AS RatingsAndScores,
+            STRING_AGG(pc.ProductionCompanyName, ',') AS ProductionCompanies
+        FROM 
+            PlaylistMovies pm
+        JOIN 
+            Movie m ON pm.Year = m.Year AND pm.Name = m.Name
+        LEFT JOIN 
+            Acted_In ai ON m.Year = ai.Year AND m.Name = ai.Name
+        LEFT JOIN 
+            Actor a ON ai.ActorName = a.ActorName
+        LEFT JOIN 
+            Directed_By db ON m.Year = db.Year AND m.Name = db.Name
+        LEFT JOIN 
+            Director d ON db.DirectorName = d.DirectorName
+        LEFT JOIN 
+            MovieStreamedOn ms ON m.Year = ms.Year AND m.Name = ms.Name
+        LEFT JOIN 
+            GenreToMovie g ON m.Year = g.Year AND m.Name = g.Name
+        LEFT JOIN 
+            MovieRating r ON m.Year = r.Year AND m.Name = r.Name
+        LEFT JOIN 
+            Produced_By pb ON m.Year = pb.Year AND m.Name = pb.Name
+        LEFT JOIN 
+            ProductionCompany pc ON pb.ProductionCompanyName = pc.ProductionCompanyName
+        WHERE 
+            pm.UserID = @UserId AND pm.PlaylistName = @PlaylistName
+        GROUP BY 
+            m.Name, m.Year, m.DurationMins, m.Description, m.Image";
+
+            var parameters = new[]
+            {
+        new SqlParameter("@UserId", userId),
+        new SqlParameter("@PlaylistName", playlistName)
+    };
+
+            var movieDetails = new List<MovieSearchDetails>();
+
+            using (var connection = _context.Database.GetDbConnection())
+            {
+                await connection.OpenAsync();
+
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = sql;
+                    command.Parameters.AddRange(parameters);
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            var movieDetail = new MovieSearchDetails
+                            {
+                                Title = reader["Title"].ToString(),
+                                Year = reader["Year"] != DBNull.Value ? (int?)reader["Year"] : null,
+                                DurationMins = reader["DurationMins"] != DBNull.Value ? (int?)reader["DurationMins"] : null,
+                                Description = reader["Description"].ToString(),
+                                Image = reader["Image"].ToString(),
+                                Actors = reader["Actors"].ToString(),
+                                Directors = reader["Directors"].ToString(),
+                                StreamingServices = reader["StreamingServices"].ToString(),
+                                Genres = reader["Genres"].ToString(),
+                                RatingsAndScores = reader["RatingsAndScores"].ToString(),
+                                ProductionCompanies = reader["ProductionCompanies"].ToString()
+                            };
+
+                            movieDetails.Add(movieDetail);
+                        }
+                    }
+                }
+            }
+
+            return Ok(movieDetails);
+        }
+
+        [HttpDelete("removeMovieFromPlaylist")]
+        public async Task<IActionResult> RemoveMovieFromPlaylist([FromQuery] int userId, [FromQuery] string playlistName, [FromQuery] int movieYear, [FromQuery] string movieName)
+        {
+            if (userId <= 0 || string.IsNullOrWhiteSpace(playlistName) || movieYear <= 0 || string.IsNullOrWhiteSpace(movieName))
+            {
+                return BadRequest("Invalid input data.");
+            }
+
+            var deleteSql = "DELETE FROM PlaylistMovies WHERE UserID = @UserId AND PlaylistName = @PlaylistName AND Year = @MovieYear AND Name = @MovieName";
+
+            try
+            {
+                // Execute the delete command
+                var result = await _context.Database.ExecuteSqlRawAsync(deleteSql,
+                    new SqlParameter("@UserId", userId),
+                    new SqlParameter("@PlaylistName", playlistName),
+                    new SqlParameter("@MovieYear", movieYear),
+                    new SqlParameter("@MovieName", movieName));
+
+                if (result == 0)
+                {
+                    return NotFound("No movie found for the given user ID, playlist name, movie year, and movie name.");
+                }
+
+                return Ok("Movie removed from the playlist successfully.");
+            }
+            catch (Exception ex)
+            {
+                // Log the exception
+                Console.WriteLine($"Error: {ex.Message}");
+                return StatusCode(500, "An error occurred while removing the movie from the playlist.");
             }
         }
 
