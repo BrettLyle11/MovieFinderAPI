@@ -443,36 +443,81 @@ namespace MovieFinderAPI.Controllers
             }
         }
 
+        //  Old getFilteredMovie in case I broke the new one
+
+        //[HttpPost("moviesByFilters")]
+
+        //public async Task<ActionResult<MovieSearchDetails>> getFilteredMovie([FromBody] MovieFilters filters)
+        //{
+        //    if (filters == null)
+        //    {
+        //        return null;
+        //    }
+        //    var parameters = new List<SqlParameter>
+        //    {
+        //        new SqlParameter("@DurationMins", filters.DurationMins ?? (object)DBNull.Value),
+        //        new SqlParameter("@MovieYear", filters.MovieYear ?? (object)DBNull.Value),
+        //        new SqlParameter("@MovieTitle", filters.MovieTitle ?? (object)DBNull.Value),
+        //        new SqlParameter("@ActorNames", filters.ActorNames ?? (object)DBNull.Value),
+        //        new SqlParameter("@DirectorNames", filters.DirectorNames ?? (object)DBNull.Value),
+        //        new SqlParameter("@StreamingPlatforms", filters.StreamingPlatforms ?? (object)DBNull.Value),
+        //        new SqlParameter("@RatingCompanies", filters.RatingCompanies ?? (object)DBNull.Value),
+        //        new SqlParameter("@Genres", filters.Genres ?? (object)DBNull.Value)
+        //    };
+        //    var movies = await _context.Set<MovieSearchDetails>()
+        //        .FromSqlRaw("EXEC GetMoviesWithDetails @DurationMins, @MovieYear, @MovieTitle, @ActorNames, @DirectorNames, @StreamingPlatforms, @RatingCompanies, @Genres",
+        //                    parameters.ToArray())
+        //        .ToListAsync();
+        //    if (movies == null || movies.Count == 0)
+        //    {
+        //        return null;
+        //    }
+        //    return Ok(movies);
+        //}
 
         [HttpPost("moviesByFilters")]
-
-        public async Task<ActionResult<MovieSearchDetails>> getFilteredMovie([FromBody] MovieFilters filters)
+        public async Task<ActionResult<IEnumerable<MovieSearchDetails>>> getFilteredMovie([FromBody] MovieFilters filters, [FromQuery] int userId)
         {
             if (filters == null)
             {
-                return null;
+                return BadRequest("Filters cannot be null");
             }
+
             var parameters = new List<SqlParameter>
-            {
-                new SqlParameter("@DurationMins", filters.DurationMins ?? (object)DBNull.Value),
-                new SqlParameter("@MovieYear", filters.MovieYear ?? (object)DBNull.Value),
-                new SqlParameter("@MovieTitle", filters.MovieTitle ?? (object)DBNull.Value),
-                new SqlParameter("@ActorNames", filters.ActorNames ?? (object)DBNull.Value),
-                new SqlParameter("@DirectorNames", filters.DirectorNames ?? (object)DBNull.Value),
-                new SqlParameter("@StreamingPlatforms", filters.StreamingPlatforms ?? (object)DBNull.Value),
-                new SqlParameter("@RatingCompanies", filters.RatingCompanies ?? (object)DBNull.Value),
-                new SqlParameter("@Genres", filters.Genres ?? (object)DBNull.Value)
+{
+            new SqlParameter("@DurationMins", filters.DurationMins ?? (object)DBNull.Value),
+            new SqlParameter("@MovieYear", filters.MovieYear ?? (object)DBNull.Value),
+            new SqlParameter("@MovieTitle", filters.MovieTitle ?? (object)DBNull.Value),
+            new SqlParameter("@ActorNames", filters.ActorNames ?? (object)DBNull.Value),
+            new SqlParameter("@DirectorNames", filters.DirectorNames ?? (object)DBNull.Value),
+            new SqlParameter("@StreamingPlatforms", filters.StreamingPlatforms ?? (object)DBNull.Value),
+            new SqlParameter("@RatingCompanies", filters.RatingCompanies ?? (object)DBNull.Value),
+            new SqlParameter("@Genres", filters.Genres ?? (object)DBNull.Value)
             };
+
             var movies = await _context.Set<MovieSearchDetails>()
                 .FromSqlRaw("EXEC GetMoviesWithDetails @DurationMins, @MovieYear, @MovieTitle, @ActorNames, @DirectorNames, @StreamingPlatforms, @RatingCompanies, @Genres",
                             parameters.ToArray())
                 .ToListAsync();
+
             if (movies == null || movies.Count == 0)
             {
                 return null;
             }
-            return Ok(movies);
+
+            // Apply additional filtering conditions here
+            var filteredMovies = movies.Where(movie =>
+                !_context.WatchHistory.Any(wh => wh.UserID == userId && wh.Year == movie.Year && wh.Name == movie.Title)
+            ).ToList();
+
+            if (filteredMovies == null || filteredMovies.Count == 0)
+            {
+                return null;
+            }
+
+            return Ok(filteredMovies);
         }
+
         [HttpPost("searchMovieName/{searchName}")]
         public async Task<ActionResult<IEnumerable<string>>> getMovieNames([FromRoute] string searchName)
         {
@@ -2234,7 +2279,7 @@ namespace MovieFinderAPI.Controllers
             var sql = "SELECT * FROM WatchHistory WHERE  UserID = @p0";
 
             // Execute the query and map results to the entity
-            var watchHistory = await _context.WatchHistories
+            var watchHistory = await _context.WatchHistory
                 .FromSqlRaw(sql, userID)
                 .ToListAsync();
 

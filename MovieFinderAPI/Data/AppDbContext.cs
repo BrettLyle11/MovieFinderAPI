@@ -22,7 +22,7 @@ namespace MovieFinderAPI.Data
         public DbSet<Actor> Actors { get; set; }
         public DbSet<ActedIn> ActedIns { get; set; }
         public DbSet<MovieFinderUser> MovieFinderUsers { get; set; }
-        public DbSet<WatchHistory> WatchHistories { get; set; }
+        public DbSet<WatchHistory> WatchHistory { get; set; }
         public DbSet<Playlist> Playlists { get; set; }
         public DbSet<PlaylistMovies> PlaylistMovies { get; set; }
         public DbSet<Admin> Admins { get; set; }
