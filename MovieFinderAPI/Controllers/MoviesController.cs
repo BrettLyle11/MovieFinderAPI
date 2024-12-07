@@ -2206,6 +2206,79 @@ namespace MovieFinderAPI.Controllers
             }
         }
 
+        [HttpPost("addMovieToWatchHistory")]
+        public async Task<IActionResult> AddMovieToWatchHistory([FromBody] AddMovieToWatchHistory request)
+        {
+            var result = await _context.Database.ExecuteSqlRawAsync(
+                "INSERT INTO WatchHistory (UserID, Year, Name, DidFinish) VALUES (@p0, @p1, @p2, @p3)",
+                request.UserId, request.movieYear, request.movieName, request.didFinish);
+
+            if (result > 0)
+            {
+                return Ok();
+            }
+            else
+            {
+                return StatusCode(500, "An error occurred while adding the relationship.");
+            }
+        }
+
+        [HttpGet("getWatchHistory")]
+        public async Task<ActionResult<IEnumerable<Playlist>>> GetHistoryAsync([FromQuery] int userID)
+        {
+            if (userID <= 0)
+            {
+                return BadRequest("Invalid user ID");
+            }
+
+            var sql = "SELECT * FROM WatchHistory WHERE  UserID = @p0";
+
+            // Execute the query and map results to the entity
+            var watchHistory = await _context.WatchHistories
+                .FromSqlRaw(sql, userID)
+                .ToListAsync();
+
+            if (watchHistory == null || !watchHistory.Any())
+            {
+                return NotFound("No WatchHistory found for the given user ID");
+            }
+
+            return Ok(watchHistory);
+        }
+
+        [HttpDelete("removeMovieFromWatchHistory")]
+        public async Task<IActionResult> RemoveMovieFromWatchHistory([FromQuery] int userId, [FromQuery] int movieYear, [FromQuery] string movieName)
+        {
+            if (userId <= 0 || movieYear <= 0 || string.IsNullOrWhiteSpace(movieName))
+            {
+                return BadRequest("Invalid input data.");
+            }
+
+            var deleteSql = "DELETE FROM WatchHistory WHERE UserID = @UserId AND Year = @MovieYear AND Name = @MovieName";
+
+            try
+            {
+                // Execute the delete command
+                var result = await _context.Database.ExecuteSqlRawAsync(deleteSql,
+                    new SqlParameter("@UserId", userId),
+                    new SqlParameter("@MovieYear", movieYear),
+                    new SqlParameter("@MovieName", movieName));
+
+                if (result == 0)
+                {
+                    return NotFound("No movie found in the watch history for the given user ID, movie year, and movie name.");
+                }
+
+                return Ok("Movie removed from the watch history successfully.");
+            }
+            catch (Exception ex)
+            {
+                // Log the exception
+                Console.WriteLine($"Error: {ex.Message}");
+                return StatusCode(500, "An error occurred while removing the movie from the watch history.");
+            }
+        }
+
         [HttpPut("BIGTEST")]
         public async Task<ActionResult> addSomeBullShit()
         {
